@@ -27,6 +27,16 @@ Você pode adicionar arquivos diretamente pelo navegador:
 
 ---
 
+## 📤 Como colocar SEUS arquivos aqui (Upload)
+Você pode subir arquivos de código (`.py`, `.js`, etc.) ou imagens (`.png`, `.jpg`):
+
+1. No topo da lista de arquivos, clique em **"Add file"**.
+2. Escolha **"Upload files"** para arrastar arquivos do seu PC **OU** **"Create new file"** para colar um código na hora.
+3. **Organização por pasta:** Se estiver criando um novo arquivo, digite `seu-nome/nome-do-arquivo.py`.
+4. No final da página, clique no botão verde **"Commit changes"**.
+
+---
+
 ## 🗑️ Como apagar um arquivo seu
 Se você subiu algo errado ou quer remover um código seu:
 
