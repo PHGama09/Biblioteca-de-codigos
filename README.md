@@ -17,7 +17,7 @@ Se você encontrou um código que deseja usar na sua máquina, siga estes passos
 
 ---
 
-## 📤 Como colocar o SEU código aqui
+## 📤 Como colocar o SEU código aqui (Manualmente)
 Você pode adicionar arquivos diretamente pelo navegador:
 
 1. No topo da lista de arquivos, clique em **"Add file"** e depois em **"Create new file"**.
