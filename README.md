@@ -32,11 +32,11 @@ Você pode adicionar arquivos diretamente pelo navegador, sem precisar instalar 
 
 ---
 
-## ⚠️ Regras Básicas
+## ⚠️ Cuidados ao abrir arquivos de outrem
 * **Não altere arquivos de outras pessoas** sem permissão.
-* Se quiser sugerir uma melhoria, use a aba de **"Issues"** ou faça um comentário.
-* Sinta-se à vontade para baixar tudo o que precisar para seus estudos!
+* Use a aba de **"Issues"** ou faça um comentário se quiser sugerir uma melhoria,.
 
 ---
-*Criado para facilitar o compartilhamento de conhecimento. 🚀*
+*Criado para facilitar o compartilhamento dos nossos trabalhos. 🚀*
+
 
