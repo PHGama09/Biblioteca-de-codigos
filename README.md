@@ -43,8 +43,8 @@ Se você subiu algo errado ou quer remover um código seu:
 ---
 
 ## ⚠️ Cuidados ao abrir arquivos de outrem
-* **Não altere arquivos de outras pessoas** sem permissão.
-* Use a aba de **"Issues"** ou faça um comentário se quiser sugerir uma melhoria,.
+* **Não altere e nem apague arquivos de outras pessoas** sem permissão.
+* Use a aba de **"Issues"** ou faça um comentário se quiser sugerir uma melhoria.
 
 ---
 *Criado para facilitar o compartilhamento dos nossos trabalhos. 🚀*
