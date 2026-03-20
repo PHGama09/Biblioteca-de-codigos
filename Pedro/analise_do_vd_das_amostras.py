@@ -143,7 +143,7 @@ def validar_roi_interativamente(frame, roi_auto, threshold_queda, voltar_n_segun
             cv2.destroyAllWindows()
             sys.exit()
 
-def analisar_video_puro(video_path, roi, frame_inicial, fps_alvo=5):
+def analisar_video_puro(video_path, roi, frame_inicial, fps_alvo=5, duracao_max_s=None):
     """
     Analisa o vídeo extraindo a média RGB pura da região especificada (ROI),
     a partir de um frame inicial, sem aplicar normalizações ou filtros.
@@ -159,9 +159,18 @@ def analisar_video_puro(video_path, roi, frame_inicial, fps_alvo=5):
     tempos, dados_rgb = [], []
     curr_frame = frame_inicial
     
+    # Calcula o frame limite se duracao_max_s for definido
+    frame_limite = None
+    if duracao_max_s is not None:
+        frame_limite = frame_inicial + int(duracao_max_s * fps_orig)
+
     print(f"Analisando ROI ({w}x{h} pixels)...")
     
     while cap.isOpened():
+        # Verifica se atingiu o tempo limite definido pelo usuário
+        if frame_limite is not None and curr_frame > frame_limite:
+            break
+
         ret, frame = cap.read()
         if not ret: break
         
@@ -176,20 +185,29 @@ def analisar_video_puro(video_path, roi, frame_inicial, fps_alvo=5):
                 media_b = np.mean(crop[:, :, 0].astype(np.float64))
                 
                 dados_rgb.append([media_r, media_g, media_b])
-                tempos.append(curr_frame / fps_orig)
+                # Tempo relativo para o gráfico
+                tempos.append((curr_frame - frame_inicial) / fps_orig)
         
         curr_frame += 1
         
     cap.release()
+
+    # --- EQUALIZAÇÃO PARA O PONTO FINAL ---
+    if duracao_max_s is not None and len(tempos) > 0 and tempos[-1] < duracao_max_s:
+        tempos.append(duracao_max_s)
+        dados_rgb.append(dados_rgb[-1])
+
     return np.array(tempos), np.array(dados_rgb)
 
 # ==========================================
 # PARÂMETROS DE CONTROLE (AJUSTE AQUI)
 # ==========================================
-video_file = Path("c:/Users/Micro/Documents/videos_amostras/Primeira rodada-20260320T213054Z-3-001/Primeira rodada/Azul_151535.mp4")
+video_file = Path("c:/Users/Micro/Documents/videos_amostras/Primeira_rodada-20260320T213054Z-3-001/Vermelho_151018.mp4")
+# Measure-Command { python   analise_do_vd_das_amostras.py }
 
-z_margem_seguranca = 40 
-voltar_n_segundos = 15.0 
+z_margem_seguranca = 100
+voltar_n_segundos = 20.0 
+duracao_analise_segundos = 60.0 + voltar_n_segundos # Define quantos segundos de vídeo serão analisados após o ponto inicial
 threshold_brilho = 235   
 fps_analise = 5          
 modo_manual_forcado = False 
@@ -222,14 +240,13 @@ if video_file.exists():
 
         # 3. Processamento Final: Analisa os dados puros
         if roi_final and roi_final[2] > 0:
-            t, rgb = analisar_video_puro(video_file, roi_final, idx_start, fps_alvo=fps_analise)
+            t_relativo, rgb = analisar_video_puro(video_file, roi_final, idx_start, fps_alvo=fps_analise, duracao_max_s=duracao_analise_segundos)
             
             # --- DEFININDO PASTA DO SCRIPT ---
             pasta_do_script = Path(os.getcwd()) # Pega o local onde o script está rodando
             nome_base = video_file.stem # Pega o nome do vídeo sem a extensão .mp4
             
             # 4. Exportação de Dados para CSV
-            t_relativo = t - t[0]
             df_export = pd.DataFrame({
                 'Tempo_s': t_relativo,
                 'R_Puro': rgb[:, 0],
@@ -250,9 +267,14 @@ if video_file.exists():
             plt.plot(t_relativo, rgb[:, 2], 'blue', label='Canal B (Azul)', linewidth=1.5)
             plt.plot(t_relativo, np.mean(rgb, axis=1), 'black', linestyle='--', label='Média Total (Escala de Cinza)', alpha=0.7)
 
-            plt.title(f"Cinética de Luminescência: {video_file.name}")
+            plt.title(f"Análise do decaimento de Luminescência: {video_file.name}")
             plt.xlabel("Tempo Relativo (s)")
             plt.ylabel("Intensidade Bruta (0-255)")
+            
+            # --- FORÇANDO EQUALIZAÇÃO VISUAL ---
+            plt.xlim(0, duracao_analise_segundos)
+            plt.gca().set_xmargin(0)
+            
             plt.legend()
             plt.grid(True, linestyle=':', alpha=0.5)
             
@@ -270,3 +292,6 @@ if video_file.exists():
         cv2.destroyAllWindows()
 else:
     print(f"Erro: Arquivo não encontrado.")
+
+# Measure-Command { python seu_arquivo.py } comando para checar o tempo
+# Measure-Command { python   analise_do_vd_das_amostras.py }
