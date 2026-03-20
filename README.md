@@ -32,6 +32,16 @@ Você pode adicionar arquivos diretamente pelo navegador, sem precisar instalar 
 
 ---
 
+## 🗑️ Como apagar um arquivo seu
+Se você subiu algo errado ou quer remover um código seu:
+
+1. Clique no arquivo que você deseja excluir.
+2. No canto direito (perto do ícone do lápis), clique no ícone da **Lixeira** (Delete this file).
+3. Role até o final da página e clique no botão vermelho **"Commit changes"** para confirmar a exclusão.
+   - *Nota: Apenas o dono do repositório ou colaboradores autorizados podem apagar arquivos.*
+
+---
+
 ## ⚠️ Cuidados ao abrir arquivos de outrem
 * **Não altere arquivos de outras pessoas** sem permissão.
 * Use a aba de **"Issues"** ou faça um comentário se quiser sugerir uma melhoria,.
