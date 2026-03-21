@@ -1,10 +1,14 @@
-# 📚 Nossa Biblioteca Comunitária de Códigos
+# 📚 Nossa Biblioteca Comunitária de Códigos . 🤓☝️
 
-Bem-vindo(a)! Este é um espaço aberto para guardarmos scripts, trechos de código e ferramentas úteis. Aqui, todos podem visualizar, copiar e contribuir com seus próprios códigos.
+Bem-vindo(a)! Este é um espaço aberto para guardarmos scripts, trechos de código e ferramentas úteis. Aqui, todos podem visualizar, copiar e contribuir com seus próprios códigos.🥳
 
 ---
 
-## 📥 Como baixar ou copiar um código
+Como mexer no repositório? 🤔 (Sem ter uma cópia na máquina)
+
+---
+
+## 📥 Como baixar ou copiar um código 🤨
 Se você encontrou um código que deseja usar na sua máquina, siga estes passos:
 
 1. **Para Copiar (Copy & Paste):**
@@ -17,7 +21,7 @@ Se você encontrou um código que deseja usar na sua máquina, siga estes passos
 
 ---
 
-## 📤 Como colocar o SEU código aqui (Manualmente)
+## 📤 Como colocar o SEU código aqui (Manualmente) 🧐
 Você pode adicionar arquivos diretamente pelo navegador:
 
 1. No topo da lista de arquivos, clique em **"Add file"** e depois em **"Create new file"**.
@@ -27,17 +31,14 @@ Você pode adicionar arquivos diretamente pelo navegador:
 
 ---
 
-## 📤 Como colocar SEUS arquivos aqui (Upload)
+## 📤 Como colocar SEUS arquivos aqui (Upload) 🤯
 Você pode subir arquivos de código (`.py`, `.js`, etc.) ou imagens (`.png`, `.jpg`):
 
 1. No topo da lista de arquivos, clique em **"Add file"**.
 2. Escolha **"Upload files"** para arrastar arquivos do seu PC **OU** **"Create new file"** para colar um código na hora.
-3. **Organização por pasta:** Se estiver criando um novo arquivo, digite `seu-nome/nome-do-arquivo.py`.
-4. No final da página, clique no botão verde **"Commit changes"**.
-
 ---
 
-## 🗑️ Como apagar um arquivo seu
+## 🗑️ Como apagar um arquivo seu 😯
 Se você subiu algo errado ou quer remover um código seu:
 
 1. Clique no arquivo que você deseja excluir.
@@ -48,10 +49,10 @@ Se você subiu algo errado ou quer remover um código seu:
 
 ---
 
-## ⚠️ Cuidados Básicos
-* **Respeite o código alheio:** Não altere ou apague arquivos de outras pessoas, sem permissão.
+## ⚠️ Cuidados Básicos 😬
+* **Respeite o código alheio:** Não altere ou apague arquivos de outras pessoas, sem permissão. 😠
 * **Mantenha sua pasta:** Tente manter seus arquivos dentro da pasta com seu nome.
-* **Segurança:** Nunca suba arquivos com senhas ou chaves de acesso privadas.
+* **Segurança:** Nunca suba arquivos com senhas ou chaves de acesso privadas. 😵‍💫
 
 ---
-*Espaço criado para facilitar o compartilhamento de conhecimento. 🚀*
+*Espaço criado para facilitar o compartilhamento de conhecimento. 😁🚀*
