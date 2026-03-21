@@ -4,7 +4,8 @@ Bem-vindo(a)! Este é um espaço aberto para guardarmos scripts, trechos de cód
 
 ---
 
-Como mexer no repositório? 🤔 (Sem ter uma cópia na máquina)
+## Como mexer no repositório? 🤔 (Sem ter uma cópia na máquina)
+Segue agora algumas informaçoes de como usar nosso repositório. 😎
 
 ---
 
