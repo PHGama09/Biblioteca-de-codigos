@@ -216,7 +216,7 @@ z_margem_seguranca = 100
 voltar_n_segundos = 10.0 
 tempo_de_observacao_final = 60.0 + voltar_n_segundos # Tempo que o gráfico e a linha devem atingir juntos.
 threshold_brilho = 180   # Ajustado para 180 para detectar melhor o vermelho
-fps_analise = 10         
+fps_analise = 30         
 modo_manual_forcado = False 
 conferir_roi_interativamente = True 
 
