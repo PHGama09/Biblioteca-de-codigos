@@ -1,0 +1,13 @@
+FPS = 30
+
+TIME
+Hours             : 0
+Minutes           : 0
+Seconds           : 37
+Milliseconds      : 525
+Ticks             : 375259730
+TotalDays         : 0,000434328391203704
+TotalHours        : 0,0104238813888889
+TotalMinutes      : 0,625432883333333
+TotalSeconds      : 37,525973
+TotalMilliseconds : 37525,973
