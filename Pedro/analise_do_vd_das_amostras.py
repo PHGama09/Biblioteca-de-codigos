@@ -21,49 +21,37 @@ def selecionar_roi_manual(video_path, frame_ref):
     # x, y são as coordenadas do canto superior esquerdo; w, h são largura e altura
     return int(roi[0]), int(roi[1]), int(roi[2]), int(roi[3])
 
-def encontrar_frame_ideal_por_tempo(video_path, threshold_queda=235, voltar_n_segundos=1.0):
+def localizar_queda_na_roi(video_path, roi, threshold_queda=180):
     """
-    Analisa o vídeo para encontrar o momento em que a luz apaga e retrocede 
-    N segundos para encontrar o frame ideal de detecção da amostra.
+    Analisa apenas a área da amostra (ROI) para encontrar o momento exato 
+    em que a intensidade cai, ignorando reflexos externos no vídeo.
     """
     cap = cv2.VideoCapture(str(video_path))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    if fps == 0: 
-        return None, 0
-    
+    x, y, w, h = roi
     frame_idx = 0
     ponto_queda_frame = 0
     encontrou_excitacao = False
+
+    print(f"Localizando queda real na ROI (Threshold: {threshold_queda})...")
     
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret: break
         
-        # Monitora o brilho máximo (ponto mais saturado do frame)
-        max_val = np.max(frame)
-        
-        # Estado 1: Procurando o momento em que a luz UV é ligada
-        if not encontrou_excitacao and max_val >= threshold_queda:
+        # Foca a análise apenas na região da amostra selecionada
+        roi_focus = frame[y:y+h, x:x+w]
+        brilho_medio = np.mean(roi_focus) # Média de brilho interna da amostra
+
+        if not encontrou_excitacao and brilho_medio >= threshold_queda:
             encontrou_excitacao = True
             
-        # Estado 2: Já excitou, agora procura o momento que a luz apagou (caiu do threshold)
-        if encontrou_excitacao and max_val < threshold_queda:
+        if encontrou_excitacao and brilho_medio < threshold_queda:
             ponto_queda_frame = frame_idx
             break
         frame_idx += 1
     
-    # Calcula quantos frames voltar para pegar a amostra ainda acesa e estável
-    # Sincroniza o tempo (segundos) com a taxa de quadros (FPS) do vídeo
-    frames_para_voltar = int(voltar_n_segundos * fps)
-    frame_alvo_idx = max(0, ponto_queda_frame - frames_para_voltar)
-    
-    # Pula o vídeo para o frame alvo e captura a imagem
-    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_alvo_idx)
-    ret, frame_final = cap.read()
     cap.release()
-    
-    # Retorna o frame de referência e seu índice temporal
-    return frame_final, frame_alvo_idx
+    return ponto_queda_frame
 
 def detectar_amostra_automatica(frame, z_margem=10):
     """
@@ -119,7 +107,7 @@ def validar_roi_interativamente(frame, roi_auto, threshold_queda, voltar_n_segun
     cv2.rectangle(frame_viz, (x, y), (x+lado, y+lado), (0, 255, 0), 3)
     
     # Adiciona texto explicativo no frame
-    msg_titulo = f"Conferencia ROI - Frame Ideal (T-{voltar_n_segundos}s)"
+    msg_titulo = f"Conferencia ROI - Amostra Detectada"
     msg_instrucoes = "ENTER: Aceitar | 'M': Mudar para Manual | ESC: Cancelar"
     
     cv2.putText(frame_viz, msg_titulo, (50, 60), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2, cv2.LINE_AA)
@@ -141,6 +129,7 @@ def validar_roi_interativamente(frame, roi_auto, threshold_queda, voltar_n_segun
             return None 
         elif key == 27: # ESC
             cv2.destroyAllWindows()
+            print("Execução cancelada pelo usuário (ESC).")
             sys.exit()
 
 def analisar_video_puro(video_path, roi, frame_inicial, fps_alvo=5, duracao_max_s=None):
@@ -202,26 +191,32 @@ def analisar_video_puro(video_path, roi, frame_inicial, fps_alvo=5, duracao_max_
 # ==========================================
 # PARÂMETROS DE CONTROLE (AJUSTE AQUI)
 # ==========================================
-video_file = Path("c:/Users/Micro/Documents/videos_amostras/Primeira_rodada-20260320T213054Z-3-001/Vermelho_151018.mp4")
+video_file = Path("c:/Users/Micro/Documents/videos_amostras/Primeira_rodada-20260320T213054Z-3-001/RGB_152153.mp4")
 # Measure-Command { python   analise_do_vd_das_amostras.py }
 
 z_margem_seguranca = 100
+segundo_referencia_roi = 10.0 # Define em qual segundo do vídeo a amostra já está acesa para capturar a ROI
 voltar_n_segundos = 20.0 
 duracao_analise_segundos = 60.0 + voltar_n_segundos # Define quantos segundos de vídeo serão analisados após o ponto inicial
-threshold_brilho = 235   
-fps_analise = 5          
+threshold_brilho = 180   
+fps_analise = 30           
 modo_manual_forcado = False 
-conferir_roi_interativamente = False 
+conferir_roi_interativamente = True
 
 # ==========================================
 # LÓGICA PRINCIPAL DE EXECUÇÃO
 # ==========================================
 if video_file.exists():
     try:
-        # 1. Busca o momento exato de desligamento e retrocede o tempo para o frame ideal
-        frame_ref, idx_start = encontrar_frame_ideal_por_tempo(video_file, threshold_brilho, voltar_n_segundos)
+        # 1. Busca o frame de referência para a ROI baseado no tempo definido
+        cap_temp = cv2.VideoCapture(str(video_file))
+        fps_temp = cap_temp.get(cv2.CAP_PROP_FPS)
+        frame_referencia_idx = int(segundo_referencia_roi * fps_temp)
+        cap_temp.set(cv2.CAP_PROP_POS_FRAMES, frame_referencia_idx) 
+        ret_temp, frame_ref = cap_temp.read() # Corrigido: desempacotamento seguro do retorno
+        cap_temp.release()
         
-        if frame_ref is None:
+        if not ret_temp or frame_ref is None:
             raise Exception("Erro na leitura do vídeo.")
 
         # 2. Define a ROI (Automática ou Manual de Backup)
@@ -238,7 +233,12 @@ if video_file.exists():
         if roi_final is None:
             roi_final = selecionar_roi_manual(video_file, frame_ref)
 
-        # 3. Processamento Final: Analisa os dados puros
+        # 3. Localiza a queda real baseada APENAS na ROI e calcula o início da análise
+        idx_queda = localizar_queda_na_roi(video_file, roi_final, threshold_brilho)
+        fps = cv2.VideoCapture(str(video_file)).get(cv2.CAP_PROP_FPS)
+        idx_start = max(0, idx_queda - int(voltar_n_segundos * fps))
+
+        # 4. Processamento Final: Analisa os dados puros
         if roi_final and roi_final[2] > 0:
             t_relativo, rgb = analisar_video_puro(video_file, roi_final, idx_start, fps_alvo=fps_analise, duracao_max_s=duracao_analise_segundos)
             
@@ -246,7 +246,7 @@ if video_file.exists():
             pasta_do_script = Path(os.getcwd()) # Pega o local onde o script está rodando
             nome_base = video_file.stem # Pega o nome do vídeo sem a extensão .mp4
             
-            # 4. Exportação de Dados para CSV
+            # 5. Exportação de Dados para CSV
             df_export = pd.DataFrame({
                 'Tempo_s': t_relativo,
                 'R_Puro': rgb[:, 0],
@@ -260,12 +260,15 @@ if video_file.exists():
             df_export.to_csv(csv_output, index=False)
             print(f"Dados exportados na pasta do script (CSV): {csv_output}")
 
-            # 5. Plotagem Científica
+            # 6. Plotagem Científica
             plt.figure(figsize=(12, 6))
             plt.plot(t_relativo, rgb[:, 0], 'red', label='Canal R (Vermelho)', linewidth=1.5)
             plt.plot(t_relativo, rgb[:, 1], 'green', label='Canal G (Verde)', linewidth=1.5)
             plt.plot(t_relativo, rgb[:, 2], 'blue', label='Canal B (Azul)', linewidth=1.5)
             plt.plot(t_relativo, np.mean(rgb, axis=1), 'black', linestyle='--', label='Média Total (Escala de Cinza)', alpha=0.7)
+            
+            # Linha indicando o momento exato detectado do desligamento
+            plt.axvline(x=voltar_n_segundos, color='gray', linestyle=':', label='Desligamento Detectado')
 
             plt.title(f"Análise do decaimento de Luminescência: {video_file.name}")
             plt.xlabel("Tempo Relativo (s)")
