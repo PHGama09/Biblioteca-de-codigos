@@ -191,7 +191,8 @@ def analisar_video_puro(video_path, roi, frame_inicial, fps_alvo=5, duracao_max_
 # ==========================================
 # PARÂMETROS DE CONTROLE (AJUSTE AQUI)
 # ==========================================
-video_file = Path("c:/Users/Micro/Documents/videos_amostras/Primeira_rodada-20260320T213054Z-3-001/RGB_152153.mp4")
+caminho_original = r"c:\Users\Micro\Documents\videos_amostras\Primeira_Rodada-20260320T213054Z-3-001\Azul_151535.mp4"
+video_file = Path(caminho_original.replace("\\", "/")) #replace para n precisar mudar manualmente o \ da linha de caminho do dwindows para / como um caminho reconhecivel
 # Measure-Command { python   analise_do_vd_das_amostras.py }
 
 z_margem_seguranca = 100
