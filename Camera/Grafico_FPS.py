@@ -5,7 +5,7 @@ from collections import Counter # Importa uma ferramenta nativa do Python projet
 # Cria a função principal. Tudo o que estiver recuado (identado) abaixo faz parte dessa função.
 # Ela recebe como parâmetro obrigatório a variável 'caminho_video' (onde o vídeo está no PC).
 def plotar_fps_do_video(caminho_video):
-    
+      
     # O comando VideoCapture, em vez de receber um número (0, 1) para abrir uma câmera, 
     # recebe o caminho de um arquivo para abrir e ler o vídeo direto do disco rígido.
     cap = cv2.VideoCapture(caminho_video)
