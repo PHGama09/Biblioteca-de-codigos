@@ -2,7 +2,7 @@ import cv2 # OpenCV, responsável pelo processamento de imagem e comunicação c
 import time # Biblioteca nativa do Python para manipulação de tempo (cronômetro e cálculo de FPS)
 
 # ==========================================
-# CONFIGURAÇÕES PRINCIPAIS
+# CONFIGURAÇÕES PRINCIPAIS 
 # ==========================================
 
 # Define qual porta USB de vídeo o sistema deve usar (1 geralmente é a câmera externa, 0 a webcam embutida do notebook)
