@@ -1,0 +1,163 @@
+import cv2 # Importa a biblioteca OpenCV para controle da câmera e processamento de imagens.
+import time # Importa a biblioteca de tempo para criar os cronômetros das fases do experimento.
+import serial # Importa a biblioteca PySerial para permitir o envio de comandos ao Arduino via porta USB.
+import analise_espectral # Importa o SEU módulo personalizado (que criamos antes) para gerar os gráficos e CSV ao final.
+
+# ==========================================
+# PARÂMETROS DO EXPERIMENTO
+# ==========================================
+porta_arduino = 'COM3'  # Define a porta USB onde o Arduino está conectado (verifique na IDE do Arduino se é a COM3 mesmo).
+baud_rate = 9600 # Define a velocidade de comunicação. Precisa ser idêntica ao Serial.begin(9600) do código fonte do Arduino.
+tempo_excitacao_segundos = 15 # Tempo em que a amostra receberá luz dos LEDs (fase de carregamento do material).
+tempo_gravacao_segundos = 30  # Tempo de gravação no escuro para capturar a curva de decaimento da luminescência.
+
+indice_camera = 1       # Define a câmera USB externa (Logitech). 0 seria a câmera nativa do notebook.
+fps_desejado = 30 # Taxa de quadros por segundo pretendida para a coleta de dados.
+largura = 640 # Resolução horizontal do vídeo.
+altura = 480 # Resolução vertical do vídeo.
+
+nome_arquivo_coleta = 'amostra_luminescente_01.avi' # Nome do vídeo final que será salvo e depois analisado pelo módulo.
+
+# ==========================================
+# 1. INICIALIZAR ARDUINO E CÂMERA
+# ==========================================
+print("Conectando ao Arduino...")
+# Bloco try/except para tentar conectar ao Arduino sem que o programa quebre violentamente se o cabo estiver desconectado.
+try:
+    # Abre a porta de comunicação com o Arduino usando os parâmetros definidos lá em cima.
+    arduino = serial.Serial(porta_arduino, baud_rate)
+    # Pausa o programa por 2 segundos. O Arduino reinicia automaticamente ao abrir a porta serial; ele precisa desse tempo para "acordar".
+    time.sleep(2) 
+    print("Arduino conectado!")
+except Exception as e:
+    # Se der erro (ex: porta COM errada), imprime o erro na tela e encerra o programa (exit).
+    print(f"Erro ao conectar no Arduino na porta {porta_arduino}: {e}")
+    exit()
+
+print("Inicializando Câmera...")
+# Abre a câmera usando o DirectShow (API do Windows) para garantir acesso total aos parâmetros da Logitech.
+cap = cv2.VideoCapture(indice_camera, cv2.CAP_DSHOW)
+
+# Define o formato MJPG para garantir a fluidez de dados pelo cabo USB.
+fourcc_cam = cv2.VideoWriter_fourcc(*'MJPG')
+cap.set(cv2.CAP_PROP_FOURCC, fourcc_cam) # Aplica o MJPG na câmera.
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, largura) # Envia a resolução horizontal.
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, altura) # Envia a resolução vertical.
+cap.set(cv2.CAP_PROP_FPS, fps_desejado) # Força a câmera a tentar manter 30 quadros por segundo.
+
+# Travando parâmetros da Logitech para o modo "Laboratório" (Tudo Manual)
+cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25) # Desliga a adaptação automática de luz.
+cap.set(cv2.CAP_PROP_EXPOSURE, -5) # Fixa a claridade manualmente.
+cap.set(cv2.CAP_PROP_AUTO_WB, 0) # Desliga a correção automática de cores (Balanço de Branco).
+cap.set(cv2.CAP_PROP_WB_TEMPERATURE, 4000) # Fixa a temperatura de cor em 4000K para não distorcer os canais RGB.
+cap.set(cv2.CAP_PROP_AUTOFOCUS, 0) # Desliga o motor de foco automático.
+cap.set(cv2.CAP_PROP_FOCUS, 0) # Fixa o foco em um ponto específico.
+
+# Prepara o "gravador" do OpenCV para criar o arquivo .avi usando a compressão XVID.
+fourcc_out = cv2.VideoWriter_fourcc(*'XVID')
+# Cria o objeto 'out' que ficará aguardando as imagens para escrever no HD do PC.
+out = cv2.VideoWriter(nome_arquivo_coleta, fourcc_out, fps_desejado, (largura, altura))
+
+
+# ==========================================
+# 2. ETAPA DE EXCITAÇÃO (LEDS LIGADOS)
+# ==========================================
+print(f"\n--- Iniciando Excitação por {tempo_excitacao_segundos}s ---")
+# Envia o byte '1' para o Arduino. No código do Arduino, isso aciona o relé/mosfet e liga os LEDs da caixa escura.
+arduino.write(b'1') 
+
+# Marca a hora exata em que os LEDs foram ligados.
+tempo_inicio_excitacao = time.time()
+
+# Loop que vai rodar continuamente enquanto o tempo passado for menor que os 15s de excitação.
+while (time.time() - tempo_inicio_excitacao) < tempo_excitacao_segundos:
+    # Lemos a câmera constantemente apenas para "limpar" o buffer USB, evitando acumular imagens velhas na memória.
+    ret, frame = cap.read() 
+    if not ret:
+        break # Sai do loop se a câmera falhar.
+    
+    # Desenha um texto laranja na tela informando que os LEDs estão ligados (Não gravamos isso no vídeo).
+    cv2.putText(frame, "EXCITANDO AMOSTRA...", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 165, 255), 2, cv2.LINE_AA)
+    # Mostra a imagem ao vivo no monitor.
+    cv2.imshow('Coleta de Dados', frame)
+    # Dá um respiro de 1 milissegundo para o Windows atualizar a janela.
+    cv2.waitKey(1)
+
+# ==========================================
+# 3. ETAPA DE DECAIMENTO (LEDS DESLIGADOS + GRAVAÇÃO)
+# ==========================================
+print(f"\n--- Iniciando Gravação do Decaimento por {tempo_gravacao_segundos}s ---")
+# Envia o byte '0' para o Arduino. Os LEDs se apagam instantaneamente.
+arduino.write(b'0') 
+
+# Zera o cronômetro marcando a hora exata em que o escuro total começou.
+tempo_inicio_gravacao = time.time()
+# Variável auxiliar para calcular o FPS.
+prev_frame_time = 0
+
+# Loop infinito da gravação principal.
+while True:
+    # Puxa a foto da amostra no escuro.
+    ret, frame = cap.read()
+    if not ret:
+        break
+    
+    # Calcula quantos segundos se passaram desde que a luz apagou.
+    tempo_decorrido = time.time() - tempo_inicio_gravacao
+    
+    # Se o tempo chegou no limite (ex: 30s), aborta o loop e finaliza a captura.
+    if tempo_decorrido >= tempo_gravacao_segundos:
+        print("\nGravação concluída.")
+        break
+    
+    # SALVAMENTO: Escreve a imagem PURA e limpa no arquivo de vídeo do computador.
+    out.write(frame)
+    
+    # Pega o tempo do quadro atual.
+    new_frame_time = time.time()
+    try:
+        # Matemática do FPS (1 dividido pela diferença de tempo entre o quadro atual e o anterior).
+        fps_real = 1 / (new_frame_time - prev_frame_time)
+    except ZeroDivisionError:
+        fps_real = 0 # Prevenção contra erro matemático se o processador for rápido demais.
+    
+    # Salva o tempo atual para ser usado como "tempo anterior" na próxima volta do loop.
+    prev_frame_time = new_frame_time
+    
+    # Calcula o tempo que falta para acabar.
+    tempo_restante = max(0, tempo_gravacao_segundos - tempo_decorrido)
+    
+    # Desenha os indicadores de Gravação (Vermelho), FPS (Verde) e Tempo (Branco) na imagem.
+    cv2.putText(frame, "GRAVANDO DECAIMENTO", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+    cv2.putText(frame, f"FPS: {int(fps_real)}", (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+    cv2.putText(frame, f"Tempo: {tempo_restante:.1f}s", (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+    
+    # Mostra a imagem com os dados na tela do monitor.
+    cv2.imshow('Coleta de Dados', frame)
+    
+    # Se você apertar a tecla 'q', o loop é abortado emergencialmente.
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        print("\nProcesso interrompido manualmente.")
+        # Manda um sinal extra para o Arduino garantindo que os LEDs fiquem apagados após o cancelamento.
+        arduino.write(b'0') 
+        break
+
+# ==========================================
+# 4. FINALIZAÇÃO DO HARDWARE E CHAMADA DA ANÁLISE
+# ==========================================
+# Desconecta o Arduino da porta serial, liberando a porta para outros programas.
+arduino.close()
+# Desliga a câmera Logitech.
+cap.release()
+# Salva de forma definitiva o arquivo de vídeo no disco rígido.
+out.release()
+# Fecha todas as janelas pretas que foram abertas na área de trabalho.
+cv2.destroyAllWindows()
+print(f"Vídeo da coleta salvo como '{nome_arquivo_coleta}'")
+
+# Integração Mágica: Assim que o vídeo é fechado e salvo na linha acima, 
+# nós chamamos a função 'executar_analise' do seu módulo 'analise_espectral' 
+# e passamos o nome do arquivo que acabamos de gravar. O script vai abrir o vídeo, 
+# pedir a área da amostra e gerar os gráficos RGB sozinho!
+print("\n--- Iniciando Processamento Espectral ---")
+analise_espectral.executar_analise(nome_arquivo_coleta)
