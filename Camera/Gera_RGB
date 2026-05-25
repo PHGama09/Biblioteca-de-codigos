@@ -1,0 +1,344 @@
+import cv2 # Biblioteca principal de visão computacional (leitura do vídeo e desenho das janelas).
+import numpy as np # Biblioteca para cálculos matemáticos avançados e manipulação de matrizes (imagens são matrizes).
+import matplotlib.pyplot as plt # Biblioteca para plotar o gráfico final do decaimento.
+from pathlib import Path # Ferramenta do Python para lidar com caminhos de arquivos de forma segura no Windows.
+import sys # Permite interagir com o sistema operacional (usado aqui para forçar o encerramento com o botão ESC).
+import pandas as pd # Biblioteca poderosa de análise de dados, usada aqui para gerar a tabela .csv estruturada.
+import os # Biblioteca do sistema operacional para descobrir em qual pasta o script está rodando atualmente.
+
+# ==========================================
+# FUNÇÃO 1: SELEÇÃO MANUAL DA ÁREA DE INTERESSE (ROI)
+# ==========================================
+def selecionar_roi_manual(video_path, frame_ref):
+    # Define o nome da janela que vai abrir.
+    window_name = "Selecione a ROI Manualmente (Desenhe o quadrado)"
+    # Cria a janela e permite que o tamanho dela seja alterado pelo usuário (WINDOW_NORMAL).
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    # Força a janela a abrir no tamanho 1280x800 para não estourar a tela do notebook.
+    cv2.resizeWindow(window_name, 1280, 800)
+    # Abre a ferramenta nativa do OpenCV que permite clicar e arrastar o mouse para desenhar um quadrado na imagem.
+    roi = cv2.selectROI(window_name, frame_ref, fromCenter=False, showCrosshair=True)
+    # Após o usuário apertar ENTER ou ESPAÇO, fecha essa janela.
+    cv2.destroyWindow(window_name)
+    # Retorna as 4 coordenadas do quadrado desenhado: Ponto X inicial, Ponto Y inicial, Largura e Altura.
+    return int(roi[0]), int(roi[1]), int(roi[2]), int(roi[3])
+
+# ==========================================
+# FUNÇÃO 2: LOCALIZADOR DO MOMENTO DE DESLIGAMENTO
+# ==========================================
+def localizar_queda_na_roi(video_path, roi, threshold_queda=180):
+    # Abre o arquivo de vídeo do disco rígido.
+    cap = cv2.VideoCapture(str(video_path))
+    # Desempacota as coordenadas do quadrado selecionado.
+    x, y, w, h = roi
+    frame_idx = 0 # Contador para saber em qual quadro (frame) o vídeo está.
+    ponto_queda_frame = 0 # Variável que vai guardar o número do quadro exato onde a luz apagou.
+    encontrou_excitacao = False # Sinalizador (flag) para saber se a amostra já estava acesa antes de procurar a queda.
+
+    print(f"Localizando queda real na ROI (Threshold: {threshold_queda})...")
+    
+    # Loop que lê o vídeo inteiro até achar a queda.
+    while cap.isOpened():
+        ret, frame = cap.read() # Lê o próximo quadro.
+        if not ret: break # Se o vídeo acabar, encerra o loop.
+        
+        # Faz um "recorte" (crop) da imagem original, separando apenas a área onde a amostra está (a ROI).
+        roi_focus = frame[y:y+h, x:x+w]
+        # Usa o NumPy para calcular a média de brilho de todos os pixels DENTRO desse recorte.
+        brilho_medio = np.mean(roi_focus)
+
+        # Se a amostra ainda não estava acesa E o brilho for maior que o limiar (180), marcamos que ela acendeu.
+        if not encontrou_excitacao and brilho_medio >= threshold_queda:
+            encontrou_excitacao = True
+            
+        # Se ela estava acesa E, de repente, o brilho caiu para baixo do limiar (180), achamos o ponto de queda!
+        if encontrou_excitacao and brilho_medio < threshold_queda:
+            ponto_queda_frame = frame_idx # Salva o número desse quadro.
+            break # Interrompe a busca, pois já achamos o que queríamos.
+        
+        frame_idx += 1 # Soma 1 no contador para ler o próximo quadro.
+    
+    cap.release() # Fecha o vídeo.
+    return ponto_queda_frame # Retorna o número do quadro onde ocorreu o apagão.
+
+# ==========================================
+# FUNÇÃO 3: DETECÇÃO AUTOMÁTICA DA AMOSTRA
+# ==========================================
+def detectar_amostra_automatica(frame, lado_definido=120, threshold_bin=200, auto_lado=False, margem_z=10, lado_min=10):
+    if frame is None: return None # Trava de segurança contra imagem vazia.
+    
+    # Converte a imagem colorida para Tons de Cinza (necessário para a binarização).
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # Transforma a imagem cinza em Preto e Branco absoluto. Tudo que for mais brilhante que 200 vira branco intenso (a amostra).
+    _, thresh = cv2.threshold(gray, threshold_bin, 255, cv2.THRESH_BINARY)
+    
+    # Calcula os "Momentos da Imagem", uma fórmula matemática que encontra o centro de massa/brilho de um objeto.
+    M = cv2.moments(thresh)
+    if M["m00"] == 0: return None # Se não achar nada brilhante, aborta o automático.
+    
+    # Fórmulas geométricas para achar a coordenada central exata (cx, cy) da mancha de luz.
+    cx = int(M["m10"] / M["m00"])
+    cy = int(M["m01"] / M["m00"])
+
+    # Se estiver configurado para calcular o tamanho do quadrado sozinho:
+    if auto_lado:
+        # Encontra as bordas externas da amostra brilhante.
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours: return None
+        # Pega a maior mancha de luz encontrada.
+        maior_contorno = max(contours, key=cv2.contourArea)
+        # Cria um círculo virtual ao redor dessa mancha e pega o Raio.
+        _, raio = cv2.minEnclosingCircle(maior_contorno)
+        # Calcula o lado ideal do quadrado para caber DENTRO da mancha luminosa com uma margem de segurança.
+        lado = max(lado_min, int(int(raio * 1.4142) - (2 * margem_z)))
+    else:
+        lado = lado_definido # Se não, usa o tamanho fixo (ex: 120 pixels).
+
+    tam = lado // 2 # Divide o lado por 2.
+    # Desloca a coordenada do centro (cx, cy) para cima e para a esquerda, achando o "Canto Superior Esquerdo" (que o OpenCV exige).
+    x = max(0, cx - tam)
+    y = max(0, cy - tam)
+    
+    return [x, y, lado, lado] # Retorna as 4 coordenadas geradas automaticamente.
+
+# ==========================================
+# FUNÇÃO 4: CONFERÊNCIA HUMANA DA DETECÇÃO
+# ==========================================
+def validar_roi_interativamente(frame, roi_auto, threshold_queda, voltar_n_segundos):
+    if roi_auto is None: return None # Se a detecção automática falhou, pula essa etapa.
+    
+    x, y, w, h = roi_auto
+    frame_viz = frame.copy() # Cria uma cópia da imagem para desenhar por cima sem estragar a original.
+    
+    # Desenha o quadrado verde usando as coordenadas automáticas.
+    cv2.rectangle(frame_viz, (x, y), (x+w, y+h), (0, 255, 0), 3)
+    cv2.putText(frame_viz, f"ROI: {w}x{h}", (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+    
+    msg_titulo = f"Conferencia ROI - Amostra Detectada"
+    msg_instrucoes = "ENTER: Aceitar | 'M': Mudar para Manual | ESC: Cancelar"
+    
+    # Escreve as instruções na tela.
+    cv2.putText(frame_viz, msg_titulo, (50, 60), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2, cv2.LINE_AA)
+    cv2.putText(frame_viz, msg_instrucoes, (50, 110), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2, cv2.LINE_AA)
+    
+    window_name = "Conferência ROI Automático"
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window_name, 1280, 800) 
+    cv2.imshow(window_name, frame_viz) # Mostra a imagem com o quadrado para o usuário aprovar.
+    
+    # Fica aguardando a decisão do usuário (Teclado).
+    while True:
+        key = cv2.waitKey(0) & 0xFF
+        if key == 13 or key == 32: # Tecla ENTER (13) ou ESPAÇO (32): Aprova o automático.
+            cv2.destroyWindow(window_name)
+            return roi_auto
+        elif key == ord('m') or key == ord('M'): # Tecla 'M': Rejeita e pede para desenhar manual.
+            cv2.destroyWindow(window_name)
+            return None 
+        elif key == 27: # Tecla ESC (27): Aborta totalmente o programa (emergência).
+            cv2.destroyAllWindows()
+            print("Execução cancelada pelo usuário (ESC).")
+            sys.exit()
+
+# ==========================================
+# FUNÇÃO 5: EXTRAÇÃO DE DADOS CIENTÍFICOS DO VÍDEO
+# ==========================================
+def analisar_video_puro(video_path, roi, frame_inicial, fps_alvo=5, duracao_max_s=None):
+    cap = cv2.VideoCapture(str(video_path))
+    fps_orig = cap.get(cv2.CAP_PROP_FPS) # Descobre o FPS original com que o vídeo foi gravado (ex: 30).
+    # Calcula quantos quadros precisa pular para atingir o FPS desejado na análise (ex: se gravou a 30 e quer analisar a 30, pula 1 em 1).
+    intervalo = max(1, int(fps_orig / fps_alvo))
+    x, y, w, h = roi
+    
+    # Avança o vídeo instantaneamente até o quadro exato de "frame_inicial" (o momento onde o decaimento começou).
+    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_inicial)
+    
+    tempos, dados_rgb = [], [] # Listas vazias que vão guardar os resultados.
+    curr_frame = frame_inicial
+    
+    frame_limite = None
+    # Se uma duração máxima de análise foi definida, calcula em qual quadro deve parar.
+    if duracao_max_s is not None:
+        frame_limite = frame_inicial + int(duracao_max_s * fps_orig)
+
+    print(f"Analisando ROI ({w}x{h} pixels)...")
+    
+    while cap.isOpened():
+        # Trava: se o quadro atual passar do limite, encerra a análise.
+        if frame_limite is not None and curr_frame > frame_limite:
+            break
+
+        ret, frame = cap.read()
+        if not ret: break # Se o vídeo acabar, encerra o loop.
+        
+        # Só processa se o quadro for múltiplo do nosso 'intervalo' (para manter a cadência de dados correta).
+        if (curr_frame - frame_inicial) % intervalo == 0:
+            crop = frame[y:y+h, x:x+w] # Recorta a área exata da amostra.
+            
+            if crop.size > 0:
+                # EXTRAÇÃO CRÍTICA DO RGB PURO (O núcleo da espectroscopia)
+                # O OpenCV lê como BGR (Azul [0], Verde [1], Vermelho [2]).
+                # Converte para float64 para não perder precisão nas casas decimais durante o cálculo da média de brilho daquele recorte.
+                media_r = np.mean(crop[:, :, 2].astype(np.float64)) # Vermelho
+                media_g = np.mean(crop[:, :, 1].astype(np.float64)) # Verde
+                media_b = np.mean(crop[:, :, 0].astype(np.float64)) # Azul
+                
+                # Guarda os 3 valores em um array na nossa lista.
+                dados_rgb.append([media_r, media_g, media_b])
+                # Calcula em qual segundo relativo nós estamos e guarda na lista de tempos.
+                tempos.append((curr_frame - frame_inicial) / fps_orig)
+        
+        curr_frame += 1 # Vai para o próximo quadro.
+        
+    cap.release()
+
+    # Preenchimento de ajuste: se o vídeo acabou um pouco antes do tempo máximo exigido, repete o último valor lido para manter o gráfico com tamanho consistente.
+    if duracao_max_s is not None and len(tempos) > 0 and tempos[-1] < duracao_max_s:
+        tempos.append(duracao_max_s)
+        dados_rgb.append(dados_rgb[-1])
+
+    # Converte as listas normais do Python em Matrizes do NumPy (necessário para gerar os gráficos matemáticos).
+    return np.array(tempos), np.array(dados_rgb)
+
+# ==========================================
+# FUNÇÃO 6: O MESTRE DE OBRAS (INTEGRAÇÃO)
+# ==========================================
+def executar_analise(caminho_do_video):
+    video_file = Path(caminho_do_video) # Prepara o caminho do arquivo para evitar erros de barra (/) no Windows.
+    
+    # Parâmetros locais fixos para a sua análise.
+    usar_metodo_automatico = True        
+    calcular_lado_automatico = True     
+    lado_roi_manual = 120                
+    salvar_frame_roi = True              
+    threshold_binarizacao = 200          
+
+    z_margem_seguranca = 50     
+    lado_minimo_roi = 20         
+    segundo_referencia_roi = 10.0 # Em qual segundo procurar a amostra iluminada.
+    voltar_n_segundos = 20.0 # Quantos segundos incluir ANTES do decaimento (fase de carregamento).
+    duracao_analise_segundos = 60.0 + voltar_n_segundos # Tempo total do eixo X no gráfico.
+    threshold_brilho = 180   
+    fps_analise = 30           
+    modo_manual_forcado = not usar_metodo_automatico 
+    conferir_roi_interativamente = True
+
+    if video_file.exists():
+        try:
+            # Abre o vídeo rapidamente apenas para buscar um "frame referência" iluminado para definir a ROI.
+            cap_temp = cv2.VideoCapture(str(video_file))
+            fps_temp = cap_temp.get(cv2.CAP_PROP_FPS)
+            frame_referencia_idx = int(segundo_referencia_roi * fps_temp) # Converte o segundo desejado em número de quadro.
+            cap_temp.set(cv2.CAP_PROP_POS_FRAMES, frame_referencia_idx) # Pula o vídeo direto para esse quadro.
+            ret_temp, frame_ref = cap_temp.read() # Lê o quadro.
+            cap_temp.release() # Fecha essa leitura temporária.
+            
+            if not ret_temp or frame_ref is None:
+                raise Exception("Erro na leitura do vídeo.")
+
+            roi_final = None
+            
+            # Tenta executar o modo de busca automática da amostra.
+            if not modo_manual_forcado:
+                roi_auto_tentativa = detectar_amostra_automatica(frame_ref, 
+                                                                lado_definido=lado_roi_manual, 
+                                                                threshold_bin=threshold_binarizacao,
+                                                                auto_lado=calcular_lado_automatico,
+                                                                margem_z=z_margem_seguranca,
+                                                                lado_min=lado_minimo_roi)
+                
+                if conferir_roi_interativamente:
+                    # Se achou algo, abre a janela para o usuário confirmar.
+                    roi_final = validar_roi_interativamente(frame_ref, roi_auto_tentativa, threshold_brilho, voltar_n_segundos)
+                else:
+                    roi_final = roi_auto_tentativa
+                
+            # Se o usuário rejeitou ou o automático falhou, abre a janela de desenho manual de fallback.
+            if roi_final is None:
+                roi_final = selecionar_roi_manual(video_file, frame_ref)
+
+            # SALVAMENTO DO COMPROVANTE: Salva uma foto com o quadrado vermelho desenhado para comprovar qual área do material foi analisada.
+            if salvar_frame_roi and roi_final:
+                x, y, w, h = roi_final
+                frame_salvamento = frame_ref.copy()
+                cv2.rectangle(frame_salvamento, (x, y), (x+w, y+h), (0, 0, 255), 2)
+                cv2.putText(frame_salvamento, f"ROI: {w}x{h}", (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                # Salva a imagem no formato .png na mesma pasta do script principal.
+                cv2.imwrite(str(Path(os.getcwd()) / f"{video_file.stem}_ROI_Config.png"), frame_salvamento)
+                print(f"Frame de ROI salvo em: {os.getcwd()}")
+
+            # Acha o quadro exato em que os LEDs apagaram.
+            idx_queda = localizar_queda_na_roi(video_file, roi_final, threshold_brilho)
+            fps = cv2.VideoCapture(str(video_file)).get(cv2.CAP_PROP_FPS)
+            # Define o ponto de início da análise (volta no tempo alguns segundos para incluir o fim do patamar de carregamento).
+            idx_start = max(0, idx_queda - int(voltar_n_segundos * fps))
+
+            # Executa a extração matemática brutal das médias RGB para todos os frames.
+            if roi_final and roi_final[2] > 0:
+                t_relativo, rgb = analisar_video_puro(video_file, roi_final, idx_start, fps_alvo=fps_analise, duracao_max_s=duracao_analise_segundos)
+                
+                # Descobre onde estamos no computador para salvar os arquivos finais.
+                pasta_do_script = Path(os.getcwd()) 
+                nome_base = video_file.stem # Pega o nome do vídeo sem o ".avi".
+                
+                # ==========================================
+                # EXPORTAÇÃO PARA CSV (Excel)
+                # ==========================================
+                # Usa a biblioteca Pandas para criar uma tabela (DataFrame) organizando o tempo e as cores.
+                df_export = pd.DataFrame({
+                    'Tempo_s': t_relativo,
+                    'R_Puro': rgb[:, 0], # Pega todas as linhas da Coluna 0 (Vermelho).
+                    'G_Puro': rgb[:, 1], # Pega todas as linhas da Coluna 1 (Verde).
+                    'B_Puro': rgb[:, 2], # Pega todas as linhas da Coluna 2 (Azul).
+                    'Media_Total': np.mean(rgb, axis=1) # Faz a média dos 3 canais.
+                })
+                
+                # Salva o arquivo CSV no HD.
+                csv_output = pasta_do_script / f"{nome_base}.csv"
+                df_export.to_csv(csv_output, index=False) # index=False evita criar uma coluna inútil com números de série (0, 1, 2...).
+                print(f"Dados exportados na pasta do script (CSV): {csv_output}")
+
+                # ==========================================
+                # PLOTAGEM DO GRÁFICO (Matplotlib)
+                # ==========================================
+                plt.figure(figsize=(12, 6)) # Cria o quadro do gráfico (12x6 polegadas).
+                
+                # Plota as curvas individuais de cada cor (Curvas do Espectro).
+                plt.plot(t_relativo, rgb[:, 0], 'red', label='Canal R (Vermelho)', linewidth=1.5)
+                plt.plot(t_relativo, rgb[:, 1], 'green', label='Canal G (Verde)', linewidth=1.5)
+                plt.plot(t_relativo, rgb[:, 2], 'blue', label='Canal B (Azul)', linewidth=1.5)
+                
+                # Plota a média total como uma linha preta tracejada (--).
+                plt.plot(t_relativo, np.mean(rgb, axis=1), 'black', linestyle='--', label='Média Total (Escala de Cinza)', alpha=0.7)
+                
+                # Desenha uma linha vertical cinza pontilhada (:) sinalizando visualmente o momento exato em que a luz apagou.
+                plt.axvline(x=voltar_n_segundos, color='gray', linestyle=':', label='Desligamento Detectado')
+
+                # Títulos e formatações do gráfico.
+                plt.title(f"Análise do decaimento de Luminescência: {video_file.name}")
+                plt.xlabel("Tempo Relativo (s)")
+                plt.ylabel("Intensidade Bruta (0-255)")
+                
+                plt.xlim(0, duracao_analise_segundos) # Trava o limite horizontal do gráfico na duração definida.
+                plt.gca().set_xmargin(0) # Tira as margens em branco inúteis nas laterais.
+                
+                plt.legend() # Mostra o bloco indicando o que cada cor de linha significa.
+                plt.grid(True, linestyle=':', alpha=0.5) # Liga a grade de fundo.
+                
+                # Salva o gráfico como uma imagem PNG super detalhada (dpi=300, resolução usada para artigos científicos).
+                graph_output = pasta_do_script / f"{nome_base}.png"
+                plt.savefig(graph_output, dpi=300)
+                print(f"Gráfico de referência salvo: {graph_output}")
+                
+                # Abre a janela exibindo o gráfico gerado. A execução do programa para aqui até você fechar essa imagem.
+                plt.show()
+            else:
+                print("Análise cancelada: ROI não definido.")
+
+        except Exception as e:
+            # Trava final de segurança. Se qualquer erro bizarro ocorrer em toda a função, imprime o erro e fecha as janelas com segurança.
+            print(f"Erro: {e}")
+            cv2.destroyAllWindows()
+    else:
+        # Erro primário caso ele não ache o vídeo .avi no HD.
+        print(f"Erro: Arquivo {video_file} não encontrado.")
